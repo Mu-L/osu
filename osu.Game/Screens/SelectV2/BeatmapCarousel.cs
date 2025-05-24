@@ -26,6 +26,11 @@ namespace osu.Game.Screens.SelectV2
     {
         public Action<BeatmapInfo>? RequestPresentBeatmap { private get; init; }
 
+        /// <summary>
+        /// From the provided beatmaps, return the most appropriate one for the user's skill.
+        /// </summary>
+        public Func<IEnumerable<BeatmapInfo>, BeatmapInfo>? ChooseRecommendedBeatmap { private get; init; }
+
         public const float SPACING = 3f;
 
         private IBindableList<BeatmapSetInfo> detachedBeatmaps = null!;
@@ -47,7 +52,7 @@ namespace osu.Game.Screens.SelectV2
                 return SPACING * 2;
 
             // Beatmap difficulty panels do not overlap with themselves or any other panel.
-            if (top.Model is BeatmapInfo || bottom.Model is BeatmapInfo)
+            if (grouping.BeatmapSetsGroupedTogether && (top.Model is BeatmapInfo || bottom.Model is BeatmapInfo))
                 return SPACING;
 
             return -SPACING;
@@ -181,8 +186,13 @@ namespace osu.Game.Screens.SelectV2
                     return;
 
                 case BeatmapSetInfo setInfo:
-                    // Selecting a set isn't valid – let's re-select the first difficulty.
-                    CurrentSelection = setInfo.Beatmaps.First();
+                    // Selecting a set isn't valid – let's re-select the first visible difficulty.
+                    if (grouping.SetItems.TryGetValue(setInfo, out var items))
+                    {
+                        var beatmaps = items.Select(i => i.Model).OfType<BeatmapInfo>();
+                        CurrentSelection = ChooseRecommendedBeatmap?.Invoke(beatmaps) ?? beatmaps.First();
+                    }
+
                     return;
 
                 case BeatmapInfo beatmapInfo:
@@ -365,6 +375,7 @@ namespace osu.Game.Screens.SelectV2
         #region Drawable pooling
 
         private readonly DrawablePool<PanelBeatmap> beatmapPanelPool = new DrawablePool<PanelBeatmap>(100);
+        private readonly DrawablePool<PanelBeatmapStandalone> standalonePanelPool = new DrawablePool<PanelBeatmapStandalone>(100);
         private readonly DrawablePool<PanelBeatmapSet> setPanelPool = new DrawablePool<PanelBeatmapSet>(100);
         private readonly DrawablePool<PanelGroup> groupPanelPool = new DrawablePool<PanelGroup>(100);
         private readonly DrawablePool<PanelGroupStarDifficulty> starsGroupPanelPool = new DrawablePool<PanelGroupStarDifficulty>(11);
@@ -374,6 +385,7 @@ namespace osu.Game.Screens.SelectV2
             AddInternal(starsGroupPanelPool);
             AddInternal(groupPanelPool);
             AddInternal(beatmapPanelPool);
+            AddInternal(standalonePanelPool);
             AddInternal(setPanelPool);
         }
 
@@ -399,15 +411,16 @@ namespace osu.Game.Screens.SelectV2
         {
             switch (item.Model)
             {
-                case GroupDefinition group:
-                    if (group.Data is StarDifficulty)
-                        return starsGroupPanelPool.Get();
+                case StarDifficultyGroupDefinition:
+                    return starsGroupPanelPool.Get();
 
+                case GroupDefinition:
                     return groupPanelPool.Get();
 
                 case BeatmapInfo:
-                    // TODO: if beatmap is a group selection target, it needs to be a different drawable
-                    // with more information attached.
+                    if (!grouping.BeatmapSetsGroupedTogether)
+                        return standalonePanelPool.Get();
+
                     return beatmapPanelPool.Get();
 
                 case BeatmapSetInfo:
@@ -420,5 +433,15 @@ namespace osu.Game.Screens.SelectV2
         #endregion
     }
 
-    public record GroupDefinition(object Data, string Title);
+    /// <summary>
+    /// Defines a grouping header for a set of carousel items.
+    /// </summary>
+    /// <param name="Order">The order of this group in the carousel, sorted using ascending order.</param>
+    /// <param name="Title">The title of this group.</param>
+    public record GroupDefinition(int Order, string Title);
+
+    /// <summary>
+    /// Defines a grouping header for a set of carousel items grouped by star difficulty.
+    /// </summary>
+    public record StarDifficultyGroupDefinition(int Order, string Title, StarDifficulty Difficulty) : GroupDefinition(Order, Title);
 }

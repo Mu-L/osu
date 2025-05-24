@@ -257,7 +257,6 @@ namespace osu.Game.Tests.Visual.SongSelectV2
         }
 
         [Test]
-        [Ignore("Difficulty sorting is broken when set headers are included.")] // todo: fix.
         public void TestSortingWithDifficultyFiltered()
         {
             const int diffs_per_set = 3;
@@ -279,18 +278,38 @@ namespace osu.Game.Tests.Visual.SongSelectV2
             SortBy(SortMode.Difficulty);
             WaitForFiltering();
 
-            CheckDisplayedBeatmapSetsCount(3);
             CheckDisplayedBeatmapsCount(local_set_count * diffs_per_set);
 
             ApplyToFilter("filter to normal", c => c.SearchText = "Normal");
+            WaitForFiltering();
 
-            CheckDisplayedBeatmapSetsCount(local_set_count);
             CheckDisplayedBeatmapsCount(local_set_count);
 
             ApplyToFilter("filter to insane", c => c.SearchText = "Insane");
+            WaitForFiltering();
 
-            CheckDisplayedBeatmapSetsCount(local_set_count);
             CheckDisplayedBeatmapsCount(local_set_count);
+        }
+
+        [Test]
+        public void TestFirstDifficultyFiltered()
+        {
+            AddBeatmaps(2, 3);
+            WaitForDrawablePanels();
+
+            SelectNextGroup();
+            WaitForSelection(0, 0);
+
+            CheckDisplayedBeatmapsCount(6);
+
+            ApplyToFilter("filter first away", c => c.UserStarDifficulty.Min = 3);
+            WaitForFiltering();
+
+            CheckDisplayedBeatmapsCount(4);
+
+            SelectNextGroup();
+            SelectPrevGroup();
+            WaitForSelection(0, 1);
         }
     }
 }

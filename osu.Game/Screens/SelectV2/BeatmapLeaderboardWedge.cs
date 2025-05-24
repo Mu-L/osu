@@ -50,6 +50,9 @@ namespace osu.Game.Screens.SelectV2
         [Resolved]
         private OverlayColourProvider colourProvider { get; set; } = null!;
 
+        [Resolved]
+        private ISongSelect? songSelect { get; set; }
+
         private Container<Placeholder> placeholderContainer = null!;
         private Placeholder? placeholder;
 
@@ -59,6 +62,7 @@ namespace osu.Game.Screens.SelectV2
         private Container personalBestDisplay = null!;
 
         private Container<BeatmapLeaderboardScore> personalBestScoreContainer = null!;
+        private OsuSpriteText personalBestText = null!;
         private LoadingLayer loading = null!;
 
         private CancellationTokenSource? cancellationTokenSource;
@@ -126,10 +130,9 @@ namespace osu.Game.Screens.SelectV2
                                 Padding = new MarginPadding { Top = 5f, Bottom = 5f, Left = 70f, Right = 10f },
                                 Children = new Drawable[]
                                 {
-                                    new OsuSpriteText
+                                    personalBestText = new OsuSpriteText
                                     {
                                         Colour = colourProvider.Content2,
-                                        Text = "Personal Best",
                                         Font = OsuFont.Style.Caption1.With(weight: FontWeight.SemiBold),
                                     },
                                     personalBestScoreContainer = new Container<BeatmapLeaderboardScore>
@@ -186,7 +189,7 @@ namespace osu.Game.Screens.SelectV2
 
         private void refetchScores()
         {
-            SetScores(Array.Empty<ScoreInfo>(), null);
+            SetScores(Array.Empty<ScoreInfo>());
 
             if (beatmap.IsDefault)
             {
@@ -222,10 +225,10 @@ namespace osu.Game.Screens.SelectV2
             if (scores.FailState != null)
                 SetState((LeaderboardState)scores.FailState);
             else
-                SetScores(scores.TopScores, scores.UserScore);
+                SetScores(scores.TopScores, scores.UserScore, scores.TotalScores);
         }
 
-        protected void SetScores(IEnumerable<ScoreInfo> scores, ScoreInfo? userScore)
+        protected void SetScores(IEnumerable<ScoreInfo> scores, ScoreInfo? userScore = null, int? totalCount = null)
         {
             cancellationTokenSource?.Cancel();
             cancellationTokenSource = new CancellationTokenSource();
@@ -244,6 +247,7 @@ namespace osu.Game.Screens.SelectV2
                 Rank = i + 1,
                 IsPersonalBest = s.OnlineID == userScore?.OnlineID,
                 SelectedMods = { BindTarget = mods },
+                Action = () => onLeaderboardScoreClicked(s),
             }), loadedScores =>
             {
                 int delay = 200;
@@ -279,9 +283,15 @@ namespace osu.Game.Screens.SelectV2
                     IsPersonalBest = true,
                     Rank = userScore.Position,
                     SelectedMods = { BindTarget = mods },
+                    Action = () => onLeaderboardScoreClicked(userScore),
                 };
 
                 scoresScroll.TransformTo(nameof(scoresScroll.Padding), new MarginPadding { Bottom = personal_best_height }, 300, Easing.OutQuint);
+
+                if (totalCount != null && userScore.Position != null)
+                    personalBestText.Text = $"Personal Best (#{userScore.Position:N0} of {totalCount.Value:N0})";
+                else
+                    personalBestText.Text = "Personal Best";
             }
         }
 
@@ -307,6 +317,8 @@ namespace osu.Game.Screens.SelectV2
             personalBestDisplay.FadeOut(300, Easing.OutQuint);
             scoresScroll.TransformTo(nameof(scoresScroll.Padding), new MarginPadding(), 300, Easing.OutQuint);
         }
+
+        private void onLeaderboardScoreClicked(ScoreInfo score) => songSelect?.PresentScore(score);
 
         private LeaderboardState displayedState;
 
